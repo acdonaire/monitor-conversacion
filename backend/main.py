@@ -340,31 +340,45 @@ async def voxtral_bridge(browser_ws: WebSocket, session: Session) -> None:
             ping_interval=20,
             ping_timeout=20,
         ) as voxtral:
-            logger.info("Conectado a Voxtral: %s", VOXTRAL_WS_URL)
+            logger.info("[VOXTRAL] Conectado: %s", VOXTRAL_WS_URL)
 
-            # Protocolo de inicialización Voxtral
+            # ── Inicialización ────────────────────────────────────────────────
             first = json.loads(await voxtral.recv())
+            logger.info("[VOXTRAL] ← %s", json.dumps(first))
             if first.get("type") != "session.created":
-                logger.warning("Primer mensaje inesperado de Voxtral: %s", first)
+                logger.warning("[VOXTRAL] Esperaba session.created, recibido: %s", first.get("type"))
 
-            await voxtral.send(json.dumps({
-                "type": "session.update",
-                "model": VOXTRAL_MODEL,
-            }))
-            await voxtral.send(json.dumps({"type": "input_audio_buffer.commit"}))
+            session_update = {"type": "session.update", "model": VOXTRAL_MODEL}
+            logger.info("[VOXTRAL] → %s", json.dumps(session_update))
+            await voxtral.send(json.dumps(session_update))
+
+            # Espera confirmación de session.update antes de enviar audio
+            upd_ack = json.loads(await voxtral.recv())
+            logger.info("[VOXTRAL] ← %s", json.dumps(upd_ack))
+
+            commit_msg = {"type": "input_audio_buffer.commit"}
+            logger.info("[VOXTRAL] → %s", json.dumps(commit_msg))
+            await voxtral.send(json.dumps(commit_msg))
 
             # Acumula deltas de la frase en curso para reconstruir el texto completo
             sentence_parts: list[str] = []
+            audio_chunks_sent = 0
 
-            # Task: recibe deltas de transcripción desde Voxtral
+            # ── Task: recibe mensajes de Voxtral ──────────────────────────────
             async def recv_voxtral() -> None:
                 async for raw in voxtral:
                     try:
                         data = json.loads(raw)
                     except json.JSONDecodeError:
+                        logger.warning("[VOXTRAL] ← mensaje no-JSON: %r", raw[:120])
                         continue
 
-                    msg_type = data.get("type")
+                    msg_type = data.get("type", "?")
+
+                    # Log completo de cada mensaje (truncamos campos de audio/delta largos)
+                    log_data = {k: (v[:80] + "…" if isinstance(v, str) and len(v) > 80 else v)
+                                for k, v in data.items()}
+                    logger.info("[VOXTRAL] ← %s", json.dumps(log_data, ensure_ascii=False))
 
                     if msg_type == "transcription.delta":
                         delta = data.get("delta", "").strip()
@@ -377,11 +391,12 @@ async def voxtral_bridge(browser_ws: WebSocket, session: Session) -> None:
                             })
 
                     elif msg_type == "transcription.done":
-                        # Preferimos el campo text de Voxtral; si no existe, reconstruimos
                         full_text = (
                             data.get("text", "").strip()
                             or " ".join(sentence_parts).strip()
                         )
+                        logger.info("[VOXTRAL] transcription.done — texto: %r (partes: %d)",
+                                    full_text, len(sentence_parts))
                         sentence_parts.clear()
                         session.last_done_time = time.time()
                         if full_text:
@@ -389,14 +404,16 @@ async def voxtral_bridge(browser_ws: WebSocket, session: Session) -> None:
                                 "type": "transcript.done",
                                 "text": full_text,
                             })
-                        # Condición A: dispara análisis si han pasado MIN_ANALYSIS_INTERVAL
                         if (time.time() - session.last_analysis_time) >= MIN_ANALYSIS_INTERVAL:
                             asyncio.create_task(run_analysis(session))
 
+                    elif msg_type == "error":
+                        logger.error("[VOXTRAL] Error del servidor: %s", json.dumps(data))
+
             recv_task = asyncio.create_task(recv_voxtral())
 
+            # ── Bucle principal: reenvía audio navegador → Voxtral ────────────
             try:
-                # Bucle principal: reenvía audio del navegador → Voxtral
                 while True:
                     data = await browser_ws.receive_text()
                     try:
@@ -407,19 +424,24 @@ async def voxtral_bridge(browser_ws: WebSocket, session: Session) -> None:
                     msg_type = msg.get("type")
 
                     if msg_type == "input_audio_buffer.append":
+                        audio_chunks_sent += 1
+                        if audio_chunks_sent <= 3 or audio_chunks_sent % 50 == 0:
+                            logger.info("[VOXTRAL] → chunk de audio #%d (b64 len=%d)",
+                                        audio_chunks_sent, len(msg.get("audio", "")))
                         await voxtral.send(json.dumps({
                             "type": "input_audio_buffer.append",
                             "audio": msg.get("audio", ""),
                         }))
 
                     elif msg_type == "session.close":
-                        logger.info("Señal de cierre de sesión recibida del navegador")
+                        logger.info("[VOXTRAL] Señal de cierre recibida del navegador")
                         break
 
             except WebSocketDisconnect:
-                logger.info("WebSocket de audio desconectado")
+                logger.info("[VOXTRAL] WebSocket de audio desconectado")
             finally:
                 recv_task.cancel()
+                logger.info("[VOXTRAL] Enviando commit final (final=true)")
                 with suppress(Exception):
                     await voxtral.send(json.dumps({
                         "type": "input_audio_buffer.commit",
