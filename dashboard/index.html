@@ -377,12 +377,7 @@ function handleEvent(msg) {
   switch (msg.type) {
 
     case 'transcript.delta':
-      showListening();
-      break;
-
-    case 'transcript.done':
-      hideListening();
-      if (msg.text) addTranscriptLine(msg.text);
+      if (msg.text) appendDelta(msg.text);
       break;
 
     case 'semaphore.update':
@@ -408,22 +403,35 @@ function handleEvent(msg) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Panel de transcripción
-// transcript.delta → muestra indicador de escucha (sin texto)
-// transcript.done  → crea un <p> con el texto completo de la frase
+// transcript.delta con texto → acumula en el <p> en curso.
+// Si el delta contiene puntuación final (. ? !) cierra el párrafo:
+// el siguiente delta abrirá uno nuevo.
 // ─────────────────────────────────────────────────────────────────────────────
-function addTranscriptLine(text) {
-  const trimmed = text.trim();
-  if (!trimmed) return;
+const SENTENCE_END = /[.?!]/;
+let currentP = null;
 
+function appendDelta(text) {
   if (transcriptEl.classList.contains('placeholder')) {
     transcriptEl.classList.remove('placeholder');
     transcriptEl.textContent = '';
   }
 
-  const p = document.createElement('p');
-  p.textContent = trimmed;
-  transcriptEl.appendChild(p);
+  if (!currentP) {
+    currentP = document.createElement('p');
+    transcriptEl.appendChild(currentP);
+    showListening();
+  }
+
+  const prev = currentP.textContent;
+  const sep  = prev.length > 0 && !prev.endsWith(' ') && !text.startsWith(' ') ? ' ' : '';
+  currentP.textContent = prev + sep + text;
   transcriptEl.scrollTop = transcriptEl.scrollHeight;
+
+  // Cierra el párrafo si el delta contiene puntuación final
+  if (SENTENCE_END.test(text)) {
+    currentP = null;
+    hideListening();
+  }
 }
 
 function showListening() {
@@ -435,6 +443,7 @@ function hideListening() {
 }
 
 function resetTranscript() {
+  currentP = null;
   transcriptEl.innerHTML = '';
   transcriptEl.classList.add('placeholder');
   transcriptEl.textContent = 'Inicia una sesión para comenzar la transcripción.';
