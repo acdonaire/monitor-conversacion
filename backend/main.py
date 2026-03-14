@@ -353,6 +353,9 @@ async def voxtral_bridge(browser_ws: WebSocket, session: Session) -> None:
             }))
             await voxtral.send(json.dumps({"type": "input_audio_buffer.commit"}))
 
+            # Acumula deltas de la frase en curso para reconstruir el texto completo
+            sentence_parts: list[str] = []
+
             # Task: recibe deltas de transcripción desde Voxtral
             async def recv_voxtral() -> None:
                 async for raw in voxtral:
@@ -366,16 +369,26 @@ async def voxtral_bridge(browser_ws: WebSocket, session: Session) -> None:
                     if msg_type == "transcription.delta":
                         delta = data.get("delta", "").strip()
                         if delta:
+                            sentence_parts.append(delta)
                             session.buffer.add(delta)
                             await session.broadcast({
                                 "type": "transcript.delta",
-                                "text": delta,
                                 "timestamp_ms": int(time.time() * 1000),
                             })
 
                     elif msg_type == "transcription.done":
+                        # Preferimos el campo text de Voxtral; si no existe, reconstruimos
+                        full_text = (
+                            data.get("text", "").strip()
+                            or " ".join(sentence_parts).strip()
+                        )
+                        sentence_parts.clear()
                         session.last_done_time = time.time()
-                        await session.broadcast({"type": "transcript.done"})
+                        if full_text:
+                            await session.broadcast({
+                                "type": "transcript.done",
+                                "text": full_text,
+                            })
                         # Condición A: dispara análisis si han pasado MIN_ANALYSIS_INTERVAL
                         if (time.time() - session.last_analysis_time) >= MIN_ANALYSIS_INTERVAL:
                             asyncio.create_task(run_analysis(session))

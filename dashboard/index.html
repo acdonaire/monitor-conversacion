@@ -115,6 +115,27 @@
     #transcription-text p:last-child { margin-bottom: 0; }
     @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
     #transcription-text.placeholder { color: #3a3a4a; font-style: italic; padding: 20px; }
+
+    /* Indicador de escucha activa */
+    #listening-indicator {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      color: #555;
+      font-size: 0.85rem;
+    }
+    #listening-indicator.visible { display: flex; }
+    #listening-indicator span {
+      display: inline-block;
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #4ade80;
+      animation: blink 1s ease-in-out infinite;
+    }
+    #listening-indicator span:nth-child(2) { animation-delay: 0.2s; }
+    #listening-indicator span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes blink { 0%,100%{opacity:0.2} 50%{opacity:1} }
     #transcription-text::-webkit-scrollbar { width: 5px; }
     #transcription-text::-webkit-scrollbar-track { background: transparent; }
     #transcription-text::-webkit-scrollbar-thumb { background: #2a2a36; border-radius: 3px; }
@@ -230,6 +251,7 @@
   <section id="transcription-panel">
     <h2>Transcripción en tiempo real</h2>
     <div id="transcription-text" class="placeholder">Inicia una sesión para comenzar la transcripción.</div>
+    <div id="listening-indicator"><span></span><span></span><span></span> Escuchando...</div>
   </section>
 
   <section id="semaphore-panel">
@@ -307,7 +329,8 @@ let reconnectDelay  = 1000;
 const btnToggle      = document.getElementById('btn-toggle');
 const statusDot      = document.getElementById('status-dot');
 const sessionTimerEl = document.getElementById('session-timer');
-const transcriptEl   = document.getElementById('transcription-text');
+const transcriptEl      = document.getElementById('transcription-text');
+const listeningEl       = document.getElementById('listening-indicator');
 const circleEl       = document.getElementById('semaphore-circle');
 const estadoEl       = document.getElementById('estado-label');
 const razonEl        = document.getElementById('razon-text');
@@ -354,11 +377,12 @@ function handleEvent(msg) {
   switch (msg.type) {
 
     case 'transcript.delta':
-      accumulateDelta(msg.text || '');
+      showListening();
       break;
 
     case 'transcript.done':
-      commitCurrentLine();
+      hideListening();
+      if (msg.text) addTranscriptLine(msg.text);
       break;
 
     case 'semaphore.update':
@@ -384,44 +408,37 @@ function handleEvent(msg) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Panel de transcripción
-// Los deltas se acumulan en un <p> en curso; transcript.done lo cierra.
+// transcript.delta → muestra indicador de escucha (sin texto)
+// transcript.done  → crea un <p> con el texto completo de la frase
 // ─────────────────────────────────────────────────────────────────────────────
-let currentP = null;  // párrafo en construcción
-
-function accumulateDelta(text) {
-  if (!text) return;
+function addTranscriptLine(text) {
+  const trimmed = text.trim();
+  if (!trimmed) return;
 
   if (transcriptEl.classList.contains('placeholder')) {
     transcriptEl.classList.remove('placeholder');
     transcriptEl.textContent = '';
   }
 
-  if (!currentP) {
-    currentP = document.createElement('p');
-    transcriptEl.appendChild(currentP);
-  }
-
-  // Añade espacio entre deltas si el párrafo no está vacío ni termina en espacio
-  const current = currentP.textContent;
-  const needsSpace = current.length > 0 && !current.endsWith(' ') && !text.startsWith(' ');
-  currentP.textContent = current + (needsSpace ? ' ' : '') + text;
+  const p = document.createElement('p');
+  p.textContent = trimmed;
+  transcriptEl.appendChild(p);
   transcriptEl.scrollTop = transcriptEl.scrollHeight;
 }
 
-function commitCurrentLine() {
-  // Cierra el párrafo activo; el siguiente delta abrirá uno nuevo
-  if (currentP && !currentP.textContent.trim()) {
-    // Descarta párrafos vacíos (done sin deltas previos)
-    transcriptEl.removeChild(currentP);
-  }
-  currentP = null;
+function showListening() {
+  listeningEl.classList.add('visible');
+}
+
+function hideListening() {
+  listeningEl.classList.remove('visible');
 }
 
 function resetTranscript() {
-  currentP = null;
   transcriptEl.innerHTML = '';
   transcriptEl.classList.add('placeholder');
   transcriptEl.textContent = 'Inicia una sesión para comenzar la transcripción.';
+  hideListening();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
