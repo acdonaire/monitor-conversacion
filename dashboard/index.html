@@ -377,12 +377,11 @@ function handleEvent(msg) {
   switch (msg.type) {
 
     case 'transcript.delta':
-      showListening();
+      if (msg.text) accumulateDelta(msg.text);
       break;
 
     case 'transcript.done':
-      hideListening();
-      if (msg.text) addTranscriptLine(msg.text);
+      if (msg.text) commitLine(msg.text);
       break;
 
     case 'semaphore.update':
@@ -408,21 +407,49 @@ function handleEvent(msg) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Panel de transcripción
-// transcript.delta → muestra indicador de escucha (sin texto)
-// transcript.done  → crea un <p> con el texto completo de la frase
+// transcript.delta → acumula texto en el <p> en curso (actualización in-place)
+// transcript.done  → cierra el párrafo actual (pausa detectada por el backend)
 // ─────────────────────────────────────────────────────────────────────────────
-function addTranscriptLine(text) {
-  const trimmed = text.trim();
-  if (!trimmed) return;
+let currentP = null;
 
+function ensureTranscriptActive() {
   if (transcriptEl.classList.contains('placeholder')) {
     transcriptEl.classList.remove('placeholder');
     transcriptEl.textContent = '';
   }
+}
 
-  const p = document.createElement('p');
-  p.textContent = trimmed;
-  transcriptEl.appendChild(p);
+function accumulateDelta(text) {
+  ensureTranscriptActive();
+  showListening();
+
+  if (!currentP) {
+    currentP = document.createElement('p');
+    transcriptEl.appendChild(currentP);
+  }
+
+  // Inserta espacio si el párrafo no está vacío y ningún lado ya lo tiene
+  const prev = currentP.textContent;
+  const sep = prev.length > 0 && !prev.endsWith(' ') && !text.startsWith(' ') ? ' ' : '';
+  currentP.textContent = prev + sep + text;
+  transcriptEl.scrollTop = transcriptEl.scrollHeight;
+}
+
+function commitLine(text) {
+  // El backend ya envía el texto completo de la frase en transcript.done:
+  // lo usamos si el párrafo en curso está vacío (p.ej. done sin deltas previos visibles),
+  // de lo contrario el párrafo ya tiene el contenido correcto acumulado.
+  ensureTranscriptActive();
+
+  if (!currentP || !currentP.textContent.trim()) {
+    if (currentP) transcriptEl.removeChild(currentP);
+    const p = document.createElement('p');
+    p.textContent = text.trim();
+    transcriptEl.appendChild(p);
+  }
+
+  currentP = null;
+  hideListening();
   transcriptEl.scrollTop = transcriptEl.scrollHeight;
 }
 
@@ -435,6 +462,7 @@ function hideListening() {
 }
 
 function resetTranscript() {
+  currentP = null;
   transcriptEl.innerHTML = '';
   transcriptEl.classList.add('placeholder');
   transcriptEl.textContent = 'Inicia una sesión para comenzar la transcripción.';

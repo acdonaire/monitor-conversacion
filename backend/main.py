@@ -357,8 +357,10 @@ async def voxtral_bridge(browser_ws: WebSocket, session: Session) -> None:
             logger.info("[VOXTRAL] → %s", json.dumps(commit_msg))
             await voxtral.send(json.dumps(commit_msg))
 
-            # Acumula deltas de la frase en curso para reconstruir el texto completo
+            # Estado de la frase en curso
             sentence_parts: list[str] = []
+            empty_delta_count: int = 0   # deltas vacíos consecutivos → pausa natural
+            PAUSE_THRESHOLD = 3          # nº de vacíos seguidos para cerrar frase
             audio_chunks_sent = 0
 
             # ── Task: recibe mensajes de Voxtral ──────────────────────────────
@@ -378,23 +380,45 @@ async def voxtral_bridge(browser_ws: WebSocket, session: Session) -> None:
                     logger.info("[VOXTRAL] ← %s", json.dumps(log_data, ensure_ascii=False))
 
                     if msg_type == "transcription.delta":
-                        delta = data.get("delta", "").strip()
-                        if delta:
-                            sentence_parts.append(delta)
-                            session.buffer.add(delta)
+                        delta = data.get("delta", "")
+                        stripped = delta.strip()
+
+                        if stripped:
+                            empty_delta_count = 0
+                            sentence_parts.append(stripped)
+                            session.buffer.add(stripped)
                             await session.broadcast({
                                 "type": "transcript.delta",
+                                "text": stripped,
                                 "timestamp_ms": int(time.time() * 1000),
                             })
+                        else:
+                            # Delta vacío: posible pausa natural entre frases
+                            empty_delta_count += 1
+                            logger.debug("[VOXTRAL] delta vacío #%d consecutivo", empty_delta_count)
+
+                            if empty_delta_count >= PAUSE_THRESHOLD and sentence_parts:
+                                full_text = " ".join(sentence_parts).strip()
+                                sentence_parts.clear()
+                                empty_delta_count = 0
+                                logger.info("[VOXTRAL] Pausa detectada — cerrando frase: %r", full_text)
+                                session.last_done_time = time.time()
+                                await session.broadcast({
+                                    "type": "transcript.done",
+                                    "text": full_text,
+                                })
+                                if (time.time() - session.last_analysis_time) >= MIN_ANALYSIS_INTERVAL:
+                                    asyncio.create_task(run_analysis(session))
 
                     elif msg_type == "transcription.done":
+                        # final=true fue enviado (fin de sesión); cierra frase pendiente si queda
                         full_text = (
                             data.get("text", "").strip()
                             or " ".join(sentence_parts).strip()
                         )
-                        logger.info("[VOXTRAL] transcription.done — texto: %r (partes: %d)",
-                                    full_text, len(sentence_parts))
                         sentence_parts.clear()
+                        empty_delta_count = 0
+                        logger.info("[VOXTRAL] transcription.done — texto: %r", full_text)
                         session.last_done_time = time.time()
                         if full_text:
                             await session.broadcast({
