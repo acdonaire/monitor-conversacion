@@ -423,8 +423,7 @@ function appendDelta(text) {
   }
 
   const prev = currentP.textContent;
-  const sep  = prev.length > 0 && !prev.endsWith(' ') && !text.startsWith(' ') ? ' ' : '';
-  currentP.textContent = prev + sep + text;
+  currentP.textContent = prev + text;
   transcriptEl.scrollTop = transcriptEl.scrollHeight;
 
   // Cierra el párrafo si el delta contiene puntuación final
