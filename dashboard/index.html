@@ -102,12 +102,19 @@
       overflow-y: auto;
       padding: 20px;
       font-size: 1rem;
-      line-height: 1.75;
       color: #c8c8d8;
-      white-space: pre-wrap;
       word-break: break-word;
     }
-    #transcription-text.placeholder { color: #3a3a4a; font-style: italic; }
+    #transcription-text p {
+      line-height: 1.65;
+      padding: 8px 12px;
+      border-left: 2px solid #2a2a36;
+      margin-bottom: 10px;
+      animation: fadein 0.3s ease;
+    }
+    #transcription-text p:last-child { margin-bottom: 0; }
+    @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    #transcription-text.placeholder { color: #3a3a4a; font-style: italic; padding: 20px; }
     #transcription-text::-webkit-scrollbar { width: 5px; }
     #transcription-text::-webkit-scrollbar-track { background: transparent; }
     #transcription-text::-webkit-scrollbar-thumb { background: #2a2a36; border-radius: 3px; }
@@ -375,15 +382,22 @@ function handleEvent(msg) {
 // Panel de transcripción
 // ─────────────────────────────────────────────────────────────────────────────
 function appendTranscript(text) {
+  const trimmed = text.trim();
+  if (!trimmed) return;
+
   if (transcriptEl.classList.contains('placeholder')) {
     transcriptEl.classList.remove('placeholder');
     transcriptEl.textContent = '';
   }
-  transcriptEl.textContent += text;
+
+  const p = document.createElement('p');
+  p.textContent = trimmed;
+  transcriptEl.appendChild(p);
   transcriptEl.scrollTop = transcriptEl.scrollHeight;
 }
 
 function resetTranscript() {
+  transcriptEl.innerHTML = '';
   transcriptEl.classList.add('placeholder');
   transcriptEl.textContent = 'Inicia una sesión para comenzar la transcripción.';
 }
