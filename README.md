@@ -2,7 +2,17 @@
 
 > Una iniciativa de [ColoqIALab](https://coloquialab.es)
 
-Sistema de monitorización de conversaciones en tiempo real. Transcribe audio con Voxtral, evalúa el tono con Qwen y muestra el estado en un dashboard web con semáforo visual.
+## Introducción
+
+**monitor-conversacion** es un sistema de monitorización de conversaciones en tiempo real desarrollado como herramienta educativa por [ColoqIALab](https://coloquialab.es).
+
+Su propósito es demostrar en talleres y workshops cómo combinar modelos de IA open source para construir aplicaciones prácticas:
+
+- **Transcripción en tiempo real** con [Voxtral](https://mistral.ai/news/voxtral)
+- **Análisis de tono conversacional** con [Qwen](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct)
+- **Visualización** en un dashboard web con semáforo visual (verde / amarillo / rojo)
+
+El sistema detecta si una conversación deriva hacia un tono inapropiado y lo muestra de forma inmediata en el dashboard. Todo funciona **on-premise**, sin APIs externas, desplegado con Docker sobre GPU.
 
 ## Arquitectura
 
