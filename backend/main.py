@@ -378,7 +378,7 @@ async def voxtral_bridge(browser_ws: WebSocket, session: Session) -> None:
                     logger.info("[VOXTRAL] ← %s", json.dumps(log_data, ensure_ascii=False))
 
                     if msg_type == "transcription.delta":
-                        delta = data.get("delta", "").strip()
+                        delta = data.get("delta", "")
                         if delta:
                             sentence_parts.append(delta)
                             session.buffer.add(delta)
