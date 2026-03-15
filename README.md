@@ -14,7 +14,7 @@ Audio (micrófono) → WebSocket → [vllm-voxtral] → chunks de texto
                                          [dashboard] web en tiempo real
 ```
 
-![Arquitectura del sistema](docs/arquitectura.svg)
+![Arquitectura del sistema](docs/arquitectura_monitor_conversacion.svg)
 
 ## Requisitos
 
