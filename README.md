@@ -53,6 +53,21 @@ Audio (micrófono) → WebSocket → [vllm-voxtral] → chunks de texto
 
 **Privacidad:** ningún fragmento de audio ni texto se almacena en disco. Todo opera en memoria durante la sesión y se destruye al terminar.
 
+## Cómo funciona el frontend
+
+El dashboard es una página web estática que se abre en cualquier navegador moderno, sin necesidad de instalar nada en el cliente.
+
+Al pulsar **Iniciar sesión**, el navegador solicita permiso para usar el micrófono. Una vez concedido, el audio se captura con la **Web Audio API** a 16 kHz, mono, en formato PCM16 — el mismo formato que espera Voxtral — y se envía en tiempo real al backend mediante un **WebSocket** en la ruta `/ws/audio`.
+
+Simultáneamente, el dashboard mantiene abierto un segundo WebSocket en `/ws/events` para recibir eventos del backend:
+
+- **`transcript.delta`** — el texto transcrito llega fragmento a fragmento y se añade al panel de transcripción en tiempo real, sin esperar a que termine la frase.
+- **`semaphore.update`** — el semáforo cambia de color con una transición animada. Si la conversación está en amarillo o rojo, se muestran también la razón del estado y un consejo de mediación.
+
+Todo el análisis ocurre en el servidor. El frontend es un visualizador puro: no evalúa el tono, no interpreta el audio, no toma decisiones. Solo muestra lo que el backend le envía.
+
+El dashboard funciona en cualquier dispositivo con navegador: ordenador, tablet o móvil.
+
 ## Requisitos
 
 - Docker + Docker Compose con soporte NVIDIA (`nvidia-container-toolkit`)
