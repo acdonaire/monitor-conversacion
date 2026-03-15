@@ -55,7 +55,7 @@ si una conversación se está desarrollando de forma cordial o si está derivand
 hacia un tono inaceptable.
 
 IDIOMA: Analiza el fragmento en el idioma en que esté escrito. No traduzcas. \
-Devuelve el campo "razon" en el mismo idioma que la conversación.
+Devuelve los campos "razon" y "consejo" en el mismo idioma que la conversación.
 
 TAREA: Recibirás un fragmento de conversación reciente con marcas temporales \
 relativas. Los fragmentos están ordenados cronológicamente del más antiguo al \
@@ -103,10 +103,11 @@ Devuelve ÚNICAMENTE el siguiente JSON. Sin texto adicional. Sin markdown.
 Sin explicaciones fuera del JSON. El JSON debe ser válido y parseable.
 
 {
-  "estado": "verde" | "rojo",
+  "estado": "verde" | "amarillo" | "rojo",
   "puntuacion": <entero entre 0 y 100, donde 100 es máxima cordialidad>,
   "tendencia": "mejorando" | "estable" | "empeorando",
-  "razon": "<frase de máximo 15 palabras explicando el estado, en el idioma de la conversación. Vacío si estado es verde>"
+  "razon": "<frase de máximo 15 palabras explicando el problema, en el idioma de la conversación. Vacío string si estado es verde>",
+  "consejo": "<acción concreta e inmediata en segunda persona del plural (vosotros) adaptada al contexto específico de la conversación, usando formas como 'os propongo', 'intentad', 'recordad'. Máximo 20 palabras. Vacío string si estado es verde>"
 }
 
 El campo "tendencia" refleja cómo ha evolucionado el tono a lo largo del fragmento completo.
@@ -185,6 +186,7 @@ class SemaphoreStateMachine:
         self.puntuacion: int = 100
         self.tendencia: str = "estable"
         self.razon: str = ""
+        self.consejo: str = ""
         self._red_confirmations: int = 0
 
     def update(self, result: dict) -> bool:
@@ -192,6 +194,7 @@ class SemaphoreStateMachine:
         puntuacion = max(0, min(100, int(result.get("puntuacion", 100))))
         tendencia  = result.get("tendencia", "estable")
         razon      = result.get("razon", "")
+        consejo    = result.get("consejo", "")
 
         prev = self.estado
 
@@ -210,7 +213,8 @@ class SemaphoreStateMachine:
         self.estado     = new_estado
         self.puntuacion = puntuacion
         self.tendencia  = tendencia
-        self.razon      = razon if new_estado == "rojo" else ""
+        self.razon      = razon  if new_estado != "verde" else ""
+        self.consejo    = consejo if new_estado != "verde" else ""
 
         return new_estado != prev
 
@@ -309,6 +313,7 @@ async def run_analysis(session: Session) -> None:
             "puntuacion": session.semaphore.puntuacion,
             "tendencia":  session.semaphore.tendencia,
             "razon":      session.semaphore.razon,
+            "consejo":    session.semaphore.consejo,
         })
 
 
@@ -520,6 +525,7 @@ async def ws_events(websocket: WebSocket) -> None:
         "puntuacion": _session.semaphore.puntuacion,
         "tendencia":  _session.semaphore.tendencia,
         "razon":      _session.semaphore.razon,
+        "consejo":    _session.semaphore.consejo,
     }))
 
     try:

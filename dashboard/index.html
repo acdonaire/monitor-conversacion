@@ -208,6 +208,16 @@
       transition: opacity 0.5s ease;
     }
 
+    #consejo-text {
+      font-size: 0.88rem;
+      color: #94a3b8;
+      text-align: center;
+      max-width: 260px;
+      line-height: 1.5;
+      margin-top: 8px;
+      transition: opacity 0.5s ease;
+    }
+
     #meta-row {
       position: absolute;
       bottom: 16px;
@@ -259,6 +269,7 @@
     <div id="semaphore-circle" class="inactivo"></div>
     <div id="estado-label" class="inactivo">—</div>
     <div id="razon-text"></div>
+    <div id="consejo-text"></div>
     <div id="meta-row">
       <span>Puntuación <span class="meta-value" id="score-value">—</span></span>
       <span>Tendencia <span class="meta-value" id="tendencia-value">—</span></span>
@@ -334,6 +345,7 @@ const listeningEl       = document.getElementById('listening-indicator');
 const circleEl       = document.getElementById('semaphore-circle');
 const estadoEl       = document.getElementById('estado-label');
 const razonEl        = document.getElementById('razon-text');
+const consejoEl      = document.getElementById('consejo-text');
 const scoreEl        = document.getElementById('score-value');
 const tendenciaEl    = document.getElementById('tendencia-value');
 const errorMsgEl     = document.getElementById('error-msg');
@@ -382,10 +394,11 @@ function handleEvent(msg) {
 
     case 'semaphore.update':
       updateSemaphore(
-        msg.estado    ?? 'verde',
+        msg.estado     ?? 'verde',
         msg.puntuacion ?? null,
         msg.tendencia  ?? null,
-        msg.razon      ?? ''
+        msg.razon      ?? '',
+        msg.consejo    ?? ''
       );
       break;
 
@@ -452,7 +465,7 @@ function resetTranscript() {
 // ─────────────────────────────────────────────────────────────────────────────
 // Semáforo
 // ─────────────────────────────────────────────────────────────────────────────
-function updateSemaphore(estado, puntuacion, tendencia, razon) {
+function updateSemaphore(estado, puntuacion, tendencia, razon, consejo) {
   const valid = ['verde', 'amarillo', 'rojo'];
   if (!valid.includes(estado)) return;
 
@@ -468,9 +481,13 @@ function updateSemaphore(estado, puntuacion, tendencia, razon) {
   }
 
   razonEl.style.opacity = '0';
+  consejoEl.style.opacity = '0';
   setTimeout(() => {
-    razonEl.textContent = (estado === 'rojo' && razon) ? razon : '';
-    razonEl.style.opacity = '1';
+    const showExtras = estado !== 'verde';
+    razonEl.textContent   = (showExtras && razon)   ? razon   : '';
+    consejoEl.textContent = (showExtras && consejo) ? `💡 ${consejo}` : '';
+    razonEl.style.opacity   = '1';
+    consejoEl.style.opacity = '1';
   }, 300);
 }
 
@@ -479,6 +496,7 @@ function resetSemaphore() {
   estadoEl.className  = 'inactivo';
   estadoEl.textContent = '—';
   razonEl.textContent  = '';
+  consejoEl.textContent = '';
   scoreEl.textContent  = '—';
   tendenciaEl.textContent = '—';
 }
