@@ -71,7 +71,8 @@ El dashboard funciona en cualquier dispositivo con navegador: ordenador, tablet 
 ## Requisitos
 
 - Docker + Docker Compose con soporte NVIDIA (`nvidia-container-toolkit`)
-- GPU NVIDIA (probado en Jetson Orin Nano 8GB)
+- GPU NVIDIA (probado en A100 80GB)
+- Cuenta en HuggingFace con acceso a los modelos
 
 ## Configuración
 
@@ -102,13 +103,13 @@ El dashboard estará disponible en: **http://localhost**
 |---|---|---|
 | vllm-voxtral | 8000 | mistralai/Voxtral-Mini-4B-Realtime-2602 |
 | vllm-qwen | 8001 | Qwen/Qwen2.5-7B-Instruct |
-| dashboard | 8516 | nginx (HTML/JS) |
+| dashboard | 80 | nginx (HTML/JS) |
 
 ## Uso de VRAM estimado
 
-- Voxtral-Mini-4B: ~ GB
-- Qwen2.5-7B: ~ GB
-- **Total: ~6 GB de 8 GB disponibles**
+- Voxtral-Mini-4B: ~10 GB
+- Qwen2.5-7B: ~15 GB
+- **Total: ~25 GB de 80 GB disponibles**
 
 ## Prueba individual de servicios
 

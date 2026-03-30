@@ -1,10 +1,14 @@
-FROM vllm/vllm-openai:latest
+#FROM vllm/vllm-openai:latest
+FROM dustynv/vllm:0.6.6.post1-r36.4.0
 
 RUN pip install --no-cache-dir \
+    --extra-index-url https://pypi.org/simple \
     soxr \
     librosa \
     soundfile \
     "mistral-common>=1.9.0"
+
+RUN pip install --upgrade transformers huggingface_hub
 
 ENV VLLM_DISABLE_COMPILE_CACHE=1
 ENV HF_HOME=/root/.cache/huggingface
