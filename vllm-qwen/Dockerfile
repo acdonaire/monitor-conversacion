@@ -1,4 +1,5 @@
-FROM vllm/vllm-openai:latest
+#FROM vllm/vllm-openai:latest
+FROM dustynv/vllm:0.6.6.post1-r36.4.0
 
 ENV HF_HOME=/root/.cache/huggingface
 

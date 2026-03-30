@@ -1,75 +1,53 @@
 services:
-  vllm-voxtral:
-    build: ./vllm-voxtral
-    container_name: vllm-voxtral
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    environment:
-      - VLLM_DISABLE_COMPILE_CACHE=1
-      - HF_HOME=/root/.cache/huggingface
-      - HF_TOKEN=${HF_TOKEN}
-    volumes:
-      - hf_cache:/root/.cache/huggingface
+  whisper:
+    image: onerahmet/openai-whisper-asr-webservice:latest
+    container_name: whisper
     ports:
-      - "8000:8000"
-    command:
-      - "mistralai/Voxtral-Mini-4B-Realtime-2602"
-      - "--host"
-      - "0.0.0.0"
-      - "--port"
-      - "8000"
-      - "--max-model-len"
-      - "32768"
-      - "--gpu-memory-utilization"
-      - "0.5"
-      - "--compilation_config"
-      - '{"cudagraph_mode":"PIECEWISE"}'
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 300s
+      - "9000:9000"
+    environment:
+      - ASR_MODEL=tiny
+      - ASR_ENGINE=openai_whisper
     restart: unless-stopped
 
-  vllm-qwen:
-    build: ./vllm-qwen
-    container_name: vllm-qwen
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    environment:
-      - HF_HOME=/root/.cache/huggingface
-      - HF_TOKEN=${HF_TOKEN}
-    volumes:
-      - hf_cache:/root/.cache/huggingface
+  vllm-qwen-small:
+    image: dustynv/llama_cpp:r36.2.0
+    container_name: vllm-qwen-small
+    runtime: nvidia
+    privileged: true
     ports:
       - "8001:8001"
-    command:
-      - "Qwen/Qwen2.5-7B-Instruct"
-      - "--host"
-      - "0.0.0.0"
-      - "--port"
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+      - LD_LIBRARY_PATH=/usr/lib/aarch64-linux-gnu/tegra:/usr/local/cuda/lib64
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+      - /usr/lib/aarch64-linux-gnu/tegra:/usr/lib/aarch64-linux-gnu/tegra:ro
+    command: 
+      - python3
+      - -m
+      - llama_cpp.server
+      - --model
+      - "qwen2.5-1.5b-instruct-q4_k_m.gguf"  # Ponemos un nombre ficticio para que pase la validación
+      - --hf_model_repo_id
+      - "Qwen/Qwen2.5-1.5B-Instruct-GGUF"
+      - --model_alias
+      - "qwen"
+      - --n_gpu_layers
+      - "-1"
+      - --host
+      - 0.0.0.0
+      - --port
       - "8001"
-      - "--max-model-len"
-      - "32768"
-      - "--gpu-memory-utilization"
-      - "0.4"
+      - --n_ctx
+      - "512"
+    
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8001/docs"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 300s
+      start_period: 60s
+ 
     restart: unless-stopped
 
   backend:
@@ -78,10 +56,9 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - VOXTRAL_WS_URL=ws://vllm-voxtral:8000/v1/realtime
-      - QWEN_HTTP_URL=http://vllm-qwen:8001/v1/chat/completions
-      - VOXTRAL_MODEL=mistralai/Voxtral-Mini-4B-Realtime-2602
-      - QWEN_MODEL=Qwen/Qwen2.5-7B-Instruct
+      - WHISPER_API_URL=http://whisper:9000/asr
+      - QWEN_HTTP_URL=http://vllm-qwen-small:8001/v1/chat/completions
+      - QWEN_MODEL=Qwen/Qwen2.5-1.5B-Instruct-AWQ
       - BUFFER_WINDOW_SECONDS=90
       - MIN_ANALYSIS_INTERVAL_SECONDS=15
       - MAX_ANALYSIS_INTERVAL_SECONDS=20
@@ -89,16 +66,10 @@ services:
       - THRESHOLD_RED=40
       - CONFIRMATIONS_FOR_RED=2
     depends_on:
-      vllm-voxtral:
+      whisper:
+        condition: service_started
+      vllm-qwen-small:
         condition: service_healthy
-      vllm-qwen:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
     restart: unless-stopped
 
   dashboard:
@@ -106,9 +77,7 @@ services:
     container_name: dashboard
     ports:
       - "80:80"
-      - "443:443"
-    depends_on:
-      - backend
+      - "8516:8516"
     restart: unless-stopped
 
 volumes:
